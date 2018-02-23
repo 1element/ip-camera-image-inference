@@ -1,0 +1,25 @@
+inference:
+    # Observe this directory for new JPEG images.
+    image_watch_dir: /path/to/ip-camera-image-inference/incoming
+    # Tensorflow inception model directory.
+    model_dir: /path/to/ip-camera-image-inference/model
+    # Images classified as person are always uploaded to the FTP server.
+    # Define a probability threshold for all other images you also want to
+    # upload to the FTP server.
+    threshold: 0.80
+ftp:
+    host: 192.168.50.1
+    port: 21
+    username: user
+    password: password
+file_operations:
+    # Delete image file after classification has been done.
+    delete: false
+    # Copy all images not uploaded to the FTP server.
+    # Useful for debugging purposes.
+    copy: true
+    # Destination path for image copies.
+    copy_destination: /path/to/ip-camera-image-inference/rejected-images
+logging:
+    filename: image-inference.log
+    level: DEBUG

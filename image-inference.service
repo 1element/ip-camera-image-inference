@@ -1,0 +1,13 @@
+[Unit]
+Description=IP camera image inference service
+After=multi-user.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/ip-camera-image-inference/
+ExecStart=/usr/bin/python /path/to/ip-camera-image-inference/image-inference.py > /path/to/ip-camera-image-inference/image-inference-service.log 2>&1
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
