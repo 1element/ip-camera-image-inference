@@ -9,7 +9,7 @@ install_system_dependencies() {
 }
 
 install_python_dependencies() {
-  sudo -H pip install pyyaml watchdog
+  sudo -H pip install pyyaml paho-mqtt
 }
 
 install_tensorflow() {

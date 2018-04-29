@@ -5,18 +5,17 @@ Python script using machine learning to classify images from IP cameras.
 
 ## Introduction
 
-This Python script is meant to be executed as a systemd service. It 
-monitors a specified directory for new incoming JPEG images from an 
-IP camera.
+This Python script is meant to be executed as a systemd service. It will 
+subscribe an MQTT broker to receive JPEG images from an IP camera.
 
 The machine learning framework TensorFlow is used to classify images.
 A deep convolutional neural network (CNN) based on the Inception v3 model 
 needs to be retrained with a set of images from your IP camera to classify 
 the image either as *person* or as *nothing*.
 
-If a person is detected in the image, the Python script will upload the 
-image to an FTP server. A threshold can be configured for this to upload 
-even images with a lower probability score.
+If a person is detected in the image, the Python script will publish the 
+image to a specified MQTT topic. A threshold can be configured for this 
+to publish even images with a lower probability score.
 
 This script was designed to work on a Raspberry Pi 3 (ARM architecture), 
 but it also runs on x86_64 and should actually run on all platforms where 
@@ -33,7 +32,7 @@ a third party software detection like [Motion](https://motion-project.github.io/
 
 * TensorFlow
 * Python 2.7
-* Python PyYAML and watchdog packages
+* Python PyYAML (pyyaml) and Eclipse Paho MQTT (paho-mqtt) packages
 
 All dependencies can be installed automatically by executing `./install.sh`.
 
@@ -90,8 +89,8 @@ to the official [TensorFlow image retraining tutorial](https://www.tensorflow.or
 ### Configuration
 
 Edit the provided configuration file `config.yml`. The TensorFlow model 
-directory, your FTP server credentials, incoming image observation 
-directory and a few other settings can be configured there.
+directory and your MQTT broker connection as well as a few other settings 
+can be configured there.
 
 
 ### Run as service
@@ -118,6 +117,13 @@ sudo systemctl start image-inference.service
 # show status
 sudo systemctl status image-inference.service
 ```
+
+
+## Previous versions
+
+There is a previous version using a directory observer to receive images 
+and FTP to distribute the classified image. If you are interested in this 
+checkout the tag `v1.0.0`.
 
 
 ## Contributions

@@ -18,12 +18,12 @@
 
 This Python script is supposed to be run as a systemd service.
 
-It will observe a configured directory for new JPEG images and run 
+It will subscribe to an MQTT broker to receive new JPEG images and run 
 TensorFlow with a retrained inception model to classify the provided image 
 into 'nothing' or 'person' along with their probability score.
 
-Depending on the score and configured threshold different actions will 
-be taken, such as uploading the image to an FTP server.
+Depending on the score and configured threshold the image will either be
+discarded or published to a specified MQTT topic.
 
 Please see the provided README.md for a detailed description of how to use
 this script to perform image recognition.
@@ -34,20 +34,18 @@ from __future__ import absolute_import
 import yaml
 import logging
 import os
-import shutil
-
-from ftplib import FTP
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
+import datetime
 
 import Queue
 
 import numpy as np
 import tensorflow as tf
+import paho.mqtt.client as paho
 
 NUM_PREDICTIONS = 2
 config = None
 labels = None
+mqtt_client = None
 
 image_queue = Queue.Queue()
 
@@ -83,32 +81,47 @@ def load_labels():
   labels = [line.rstrip() for line in tf.gfile.FastGFile(filename)]
 
 
-def upload_image_ftp(image):
-  """Upload image to FTP server."""
-  logging.debug('uploading image %s to FTP server', image)
-  ftp = FTP()
-  ftp.connect(config['ftp']['host'], config['ftp']['port'])
-  ftp.login(config['ftp']['username'], config['ftp']['password'])
-  filename = os.path.basename(image)
-  file = open(image, 'rb')
-  ftp.storbinary('STOR ' + filename, file)
-  file.close()
-  ftp.quit()
+def save_image(image):
+  """Save image file if enabled in configuration."""
+  if config['save_images']['enabled']:
+    directory = config['save_images']['destination']
+    filename = datetime.datetime.now().strftime("%Y%m%d-%H%M%S%f") + '.jpg'
+    destination = os.path.join(directory, filename)
+    logging.debug('saving image to %s', destination)
+    f = open(destination, 'wb')
+    f.write(image)
+    f.close
 
 
-def copy_image(image):
-  """Copy image file if enabled in configuration."""
-  if config['file_operations']['copy']:
-    destination = config['file_operations']['copy_destination']
-    logging.debug('copying image %s to %s', image, destination)
-    shutil.copy(image, destination)
+def mqtt_connect():
+  """Create MQTT client and connect to broker."""
+  global mqtt_client
+  logging.debug('connecting to mqtt broker %s', config['mqtt']['host'])
+  mqtt_client = paho.Client()
+  mqtt_client.on_connect = mqtt_on_connect
+  mqtt_client.on_message = mqtt_on_message
+  mqtt_client.username_pw_set(config['mqtt']['username'], config['mqtt']['password'])
+  mqtt_client.connect(config['mqtt']['host'], config['mqtt']['port'])
+  mqtt_client.loop_start()
 
 
-def delete_image(image):
-  """Delete image file if enabled in configuration."""
-  if config['file_operations']['delete']:
-    logging.debug('deleting image %s', image)
-    os.remove(image)
+def mqtt_on_connect(client, userdata, flags, rc):
+  """Callback on MQTT connection."""
+  logging.debug('successfully connected to mqtt broker')
+  client.subscribe(config['mqtt']['subscribe_topic'])
+
+
+def mqtt_on_message(client, userdata, msg):
+  """Callback on MQTT message."""
+  logging.debug('mqtt message received for topic %s', msg.topic)
+  image_queue.put(msg.payload)
+
+
+def mqtt_publish(image):
+  """Publish image to MQTT broker."""
+  logging.debug('publishing image to mqtt broker topic %s', 
+    config['mqtt']['publish_topic'])
+  mqtt_client.publish(config['mqtt']['publish_topic'], image)
 
 
 def serve_inference_requests():
@@ -117,8 +130,7 @@ def serve_inference_requests():
 
   with tf.Session() as sess:
     while True:
-      image = image_queue.get()
-      image_data = tf.gfile.FastGFile(image, 'rb').read()
+      image_data = image_queue.get()
 
       tensor = sess.graph.get_tensor_by_name('final_result:0')
       predictions = sess.run(tensor, {'DecodeJpeg/contents:0': image_data})
@@ -128,35 +140,24 @@ def serve_inference_requests():
 
       human_string = labels[top_k[0]]
       score = predictions[top_k[0]]
-      logging.info('%s classified with score %.5f for %s',
-        human_string, score, image)
+      logging.info('%s classified with score %.5f', human_string, score)
 
       emit_image = False
       if human_string != 'nothing':
         emit_image = True
-        logging.debug('emitting image %s, cause %s was detected',
-          image, human_string)
+        logging.debug('emitting image cause %s was detected', human_string)
       elif score <= config['inference']['threshold']:
         emit_image = True
-        logging.debug('emitting image %s, cause score %.5f is below threshold of %s',
-          image, score, config['inference']['threshold'])
+        logging.debug('emitting image cause score %.5f is below threshold of %s',
+          score, config['inference']['threshold'])
       else:
-        logging.debug('image %s not emitted, cause nothing was detected with a probability of %.5f',
-          image, score)
+        logging.debug('image not emitted, cause nothing was detected with a probability of %.5f',
+          score)
 
       if emit_image:
-        upload_image_ftp(image)
-        delete_image(image)
+        mqtt_publish(image_data)
       else:
-        copy_image(image)
-        delete_image(image)
-
-
-class EventHandler(PatternMatchingEventHandler):
-  def on_created(self, event):
-    """Event handler, invoked on creation of new images."""
-    image_queue.put(event.src_path)
-    logging.debug('put %s to image processing queue', event.src_path)
+        save_image(image_data)
 
 
 def main(_):
@@ -173,11 +174,7 @@ if __name__ == '__main__':
   load_config()
   configure_logging()
 
-  # observer handles events in a different thread
-  observer = Observer()
-  observer.schedule(EventHandler(['*.jpg']),
-    path=config['inference']['image_watch_dir'], recursive=False)
-  observer.start()
+  mqtt_connect()
 
   # run tensorflow main app
   tf.app.run(main=main)

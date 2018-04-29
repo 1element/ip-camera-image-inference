@@ -1,25 +1,26 @@
 inference:
-    # Observe this directory for new JPEG images.
-    image_watch_dir: /path/to/ip-camera-image-inference/incoming
     # Tensorflow inception model directory.
     model_dir: /path/to/ip-camera-image-inference/model
-    # Images classified as person are always uploaded to the FTP server.
+    # Images classified as person are always published to the MQTT broker.
     # Define a probability threshold for all other images you also want to
-    # upload to the FTP server.
+    # publish to the MQTT broker.
     threshold: 0.80
-ftp:
-    host: 192.168.50.1
-    port: 21
-    username: user
+mqtt:
+    # MQTT broker connection settings.
+    host: 192.168.1.50
+    port: 1883
+    username: username
     password: password
-file_operations:
-    # Delete image file after classification has been done.
-    delete: false
-    # Copy all images not uploaded to the FTP server.
+    # Subscribe to this topic to receive images.
+    subscribe_topic: ipcamera/inference/front
+    # Publish to this topic after classification.
+    publish_topic: ipcamera/sc/front
+save_images:
+    # Save all images not published to the MQTT broker.
     # Useful for debugging purposes.
-    copy: true
-    # Destination path for image copies.
-    copy_destination: /path/to/ip-camera-image-inference/rejected-images
+    enabled: true
+    destination: /path/to/ip-camera-image-inference/rejected-images
+
 logging:
     filename: image-inference.log
     level: DEBUG
