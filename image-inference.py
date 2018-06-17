@@ -98,6 +98,7 @@ def mqtt_connect():
   global mqtt_client
   logging.debug('connecting to mqtt broker %s', config['mqtt']['host'])
   mqtt_client = paho.Client()
+  mqtt_client.tls_set()
   mqtt_client.on_connect = mqtt_on_connect
   mqtt_client.on_message = mqtt_on_message
   mqtt_client.username_pw_set(config['mqtt']['username'], config['mqtt']['password'])
