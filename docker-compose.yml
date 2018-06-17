@@ -1,0 +1,8 @@
+version: '2'
+services:
+  image-inference:
+    build: .
+    container_name: image-inference
+    restart: always
+    volumes:
+      - .:/app
